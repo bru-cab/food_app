@@ -32,11 +32,13 @@ pip install -r requirements.txt
 ```
 
 4. Set up environment variables:
-Create a `.env` file in the project root with:
-```
-OPENAI_API_KEY=your_openai_api_key
-SECRET_KEY=your_secret_key
-```
+   - Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+   - Edit the `.env` file and replace the placeholder values with your actual configuration:
+     - `OPENAI_API_KEY`: Your OpenAI API key for nutrition information retrieval
+     - Other optional configurations as needed
 
 5. Initialize the database:
 ```bash
@@ -68,6 +70,19 @@ The application can be configured to use different AI models:
 - Free (Rule-based)
 - GPT-3.5 (Requires OpenAI API key)
 - GPT-4 (Requires OpenAI API key)
+
+### Environment Variables
+
+The following environment variables can be configured in your `.env` file:
+
+- `SECRET_KEY`: Flask secret key for session security
+- `OPENAI_API_KEY`: OpenAI API key for AI features
+- `PORT`: Server port (default: 5001)
+- `HOST`: Server host (default: 0.0.0.0)
+- `DEBUG`: Enable debug mode (default: True)
+- `FLASK_ENV`: Flask environment (development/production)
+
+See `.env.example` for all available configuration options.
 
 ## License
 
