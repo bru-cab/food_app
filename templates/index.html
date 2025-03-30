@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eating Score Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Add heroicons for the delete icon -->
+    <link href="https://unpkg.com/heroicons@1.0.1/outline/css/index.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header with User Info -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Eating Score Tracker</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-gray-600">Welcome, {{ current_user.username }}</span>
+                <a href="{{ url_for('logout') }}" 
+                   class="bg-red-600 text-white py-2 px-4 rounded hover:bg-red-700 transition-colors duration-200">
+                    Logout
+                </a>
+            </div>
+        </div>
+
+        <div class="flex gap-8">
+            <!-- Food Reference Browser -->
+            <div class="w-1/3 bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">Food Database</h2>
+                <div class="mb-4">
+                    <input type="text" 
+                           id="foodSearch" 
+                           placeholder="Search foods..." 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div id="foodList" class="space-y-4 max-h-[600px] overflow-y-auto">
+                    <!-- Food items will be populated here -->
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="w-2/3">
+                <!-- Model Selection -->
+                <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Model Selection</h2>
+                    <div class="flex items-center space-x-4">
+                        <select id="modelSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <button id="setModel" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Set Model</button>
+                    </div>
+                </div>
+
+                <!-- Daily Score Card -->
+                <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Today's Score</h2>
+                    <div class="flex items-center justify-between">
+                        <div class="text-center">
+                            <div class="text-4xl font-bold mb-2" id="dailyScore">--</div>
+                            <div class="text-gray-600">Simple Score</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-4xl font-bold mb-2" id="rawScore">--</div>
+                            <div class="text-gray-600">Raw Score</div>
+                        </div>
+                        <div class="text-center">
+                            <div id="nutriscore" class="text-4xl font-bold px-3 py-1.5 rounded-full text-white">--</div>
+                            <div class="text-gray-600">Grade</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Food Entry Form -->
+                <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Add Food Entry</h2>
+                    <form id="foodForm" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="foodName" class="block text-sm font-medium text-gray-700">Food Name</label>
+                                <input type="text" id="foodName" name="foodName" required
+                                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label for="brand" class="block text-sm font-medium text-gray-700">Brand (optional)</label>
+                                <input type="text" id="brand" name="brand" placeholder="Generic"
+                                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="quantity" class="block text-sm font-medium text-gray-700">Quantity (g)</label>
+                            <input type="number" id="quantity" name="quantity" value="100" min="1" required
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="manualNutrition" name="manualNutrition" class="mr-2">
+                            <label for="manualNutrition" class="text-sm font-medium text-gray-700">Enter nutrition information manually</label>
+                        </div>
+                        <div id="nutritionInputs" class="hidden space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="calories" class="block text-sm font-medium text-gray-700">Calories (kcal)</label>
+                                    <input type="number" id="calories" name="calories" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="energy_kj" class="block text-sm font-medium text-gray-700">Energy (kJ)</label>
+                                    <input type="number" id="energy_kj" name="energy_kj" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="protein" class="block text-sm font-medium text-gray-700">Protein (g)</label>
+                                    <input type="number" id="protein" name="protein" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="carbs" class="block text-sm font-medium text-gray-700">Carbs (g)</label>
+                                    <input type="number" id="carbs" name="carbs" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="sugars" class="block text-sm font-medium text-gray-700">Sugars (g)</label>
+                                    <input type="number" id="sugars" name="sugars" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="fat" class="block text-sm font-medium text-gray-700">Total Fat (g)</label>
+                                    <input type="number" id="fat" name="fat" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="saturated_fat" class="block text-sm font-medium text-gray-700">Saturated Fat (g)</label>
+                                    <input type="number" id="saturated_fat" name="saturated_fat" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="sodium" class="block text-sm font-medium text-gray-700">Sodium (mg)</label>
+                                    <input type="number" id="sodium" name="sodium" step="1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="fiber" class="block text-sm font-medium text-gray-700">Fiber (g)</label>
+                                    <input type="number" id="fiber" name="fiber" step="0.1" min="0"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="fruits_veg_nuts" class="block text-sm font-medium text-gray-700">Fruits/Veg/Nuts (%)</label>
+                                    <input type="number" id="fruits_veg_nuts" name="fruits_veg_nuts" step="1" min="0" max="100"
+                                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Add Food</button>
+                    </form>
+                </div>
+
+                <!-- Today's Entries -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-2xl font-semibold mb-4">Today's Entries</h2>
+                    <div id="foodEntries" class="space-y-4">
+                        <!-- Food entries will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Function to get Nutri-Score style
+        function getNutriScoreStyle(grade) {
+            const styles = {
+                'A': 'bg-[#038141]',  // Very Good (Dark Green)
+                'B': 'bg-[#85BB2F]',  // Good (Light Green)
+                'C': 'bg-[#FECB02]',  // Moderate (Yellow)
+                'D': 'bg-[#EE8100]',  // Poor (Orange)
+                'E': 'bg-[#E63E11]'   // Bad (Red)
+            };
+            return styles[grade] || 'bg-gray-500';
+        }
+
+        // Function to get Nutri-Score image URL
+        function getNutriScoreImage(grade) {
+            return `/static/images/nutriscore-${grade.toLowerCase()}.png`;
+        }
+
+        // Function to update nutrition data
+        async function updateNutritionData() {
+            try {
+                const response = await fetch('/api/daily-score');
+                const data = await response.json();
+                
+                // Update scores
+                document.getElementById('dailyScore').textContent = data.simple_score;
+                document.getElementById('rawScore').textContent = data.score;
+                
+                // Update grade with color and image
+                const nutriscoreElement = document.getElementById('nutriscore');
+                nutriscoreElement.innerHTML = `
+                    <img src="${getNutriScoreImage(data.grade)}" 
+                         alt="Nutri-Score ${data.grade}" 
+                         class="h-12 w-auto">
+                `;
+                nutriscoreElement.className = `flex items-center justify-center px-3 py-1.5 rounded-lg ${getNutriScoreStyle(data.grade)}`;
+                
+                // Update food entries
+                const entriesContainer = document.getElementById('foodEntries');
+                entriesContainer.innerHTML = '';
+                
+                data.entries.forEach(entry => {
+                    const entryElement = document.createElement('div');
+                    entryElement.className = 'flex items-center justify-between p-4 bg-gray-50 rounded-lg';
+                    entryElement.innerHTML = `
+                        <div>
+                            <div class="font-semibold">${entry.name}</div>
+                            <div class="text-sm text-gray-600">${entry.quantity}g</div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="text-center">
+                                <div class="font-semibold">${entry.nutrition.calories}</div>
+                                <div class="text-sm text-gray-600">kcal</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="flex items-center justify-center ${getNutriScoreStyle(entry.nutrition.grade)} px-2 py-1 rounded-lg">
+                                    <img src="${getNutriScoreImage(entry.nutrition.grade)}" 
+                                         alt="Nutri-Score ${entry.nutrition.grade}" 
+                                         class="h-8 w-auto">
+                                </div>
+                            </div>
+                            <button onclick="deleteEntry(${entry.id})" class="text-red-600 hover:text-red-800">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    entriesContainer.appendChild(entryElement);
+                });
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Function to delete a food entry
+        async function deleteEntry(id) {
+            try {
+                const response = await fetch(`/api/food/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    await updateNutritionData();
+                } else {
+                    alert('Failed to delete entry');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to delete entry');
+            }
+        }
+
+        // Function to populate model selection
+        async function populateModelSelection() {
+            try {
+                const response = await fetch('/api/models');
+                const data = await response.json();
+                
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = '';
+                
+                Object.entries(data.available_models).forEach(([value, name]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = name;
+                    option.selected = value === data.current_model;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Function to update food reference list
+        async function updateFoodList(search = '') {
+            try {
+                const response = await fetch(`/api/food-references?search=${encodeURIComponent(search)}`);
+                const foods = await response.json();
+                
+                const foodList = document.getElementById('foodList');
+                foodList.innerHTML = '';
+                
+                foods.forEach(food => {
+                    const foodElement = document.createElement('div');
+                    foodElement.className = 'p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100';
+                    foodElement.onclick = () => fillFoodForm(food);
+                    foodElement.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-semibold">${food.name}</div>
+                                <div class="text-sm text-gray-600">${food.brand}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="flex items-center justify-center ${getNutriScoreStyle(food.nutri_score)} px-2 py-1 rounded-lg">
+                                    <img src="${getNutriScoreImage(food.nutri_score)}" 
+                                         alt="Nutri-Score ${food.nutri_score}" 
+                                         class="h-8 w-auto">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-600">
+                            <span>${food.calories} kcal</span> |
+                            <span>${food.protein}g protein</span> |
+                            <span>${food.carbs}g carbs</span> |
+                            <span>${food.fat}g fat</span>
+                        </div>
+                    `;
+                    foodList.appendChild(foodElement);
+                });
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Function to fill the food form with selected food reference
+        function fillFoodForm(food) {
+            document.getElementById('foodName').value = food.name;
+            document.getElementById('brand').value = food.brand;
+            
+            // Check the manual nutrition checkbox and show inputs
+            const manualCheckbox = document.getElementById('manualNutrition');
+            manualCheckbox.checked = true;
+            document.getElementById('nutritionInputs').classList.remove('hidden');
+            
+            // Fill in all nutrition values
+            document.getElementById('calories').value = food.calories;
+            document.getElementById('energy_kj').value = food.energy_kj;
+            document.getElementById('protein').value = food.protein;
+            document.getElementById('carbs').value = food.carbs;
+            document.getElementById('sugars').value = food.sugars;
+            document.getElementById('fat').value = food.fat;
+            document.getElementById('saturated_fat').value = food.saturated_fat;
+            document.getElementById('sodium').value = food.sodium;
+            document.getElementById('fiber').value = food.fiber;
+            document.getElementById('fruits_veg_nuts').value = food.fruits_veg_nuts;
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize
+            updateNutritionData();
+            populateModelSelection();
+            updateFoodList();
+            
+            // Set up food search
+            let searchTimeout;
+            document.getElementById('foodSearch').addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => updateFoodList(e.target.value), 300);
+            });
+            
+            // Handle model selection
+            document.getElementById('setModel').addEventListener('click', async () => {
+                const model = document.getElementById('modelSelect').value;
+                try {
+                    const response = await fetch('/api/models', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ model })
+                    });
+                    
+                    if (!response.ok) {
+                        const data = await response.json();
+                        throw new Error(data.error || 'Failed to set model');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert(error.message);
+                }
+            });
+            
+            // Handle manual nutrition toggle
+            document.getElementById('manualNutrition').addEventListener('change', (e) => {
+                const nutritionInputs = document.getElementById('nutritionInputs');
+                if (e.target.checked) {
+                    nutritionInputs.classList.remove('hidden');
+                    // Auto-calculate kJ when calories are entered
+                    document.getElementById('calories').addEventListener('input', (e) => {
+                        const calories = parseFloat(e.target.value) || 0;
+                        document.getElementById('energy_kj').value = (calories * 4.184).toFixed(1);
+                    });
+                    // Auto-calculate calories when kJ are entered
+                    document.getElementById('energy_kj').addEventListener('input', (e) => {
+                        const kj = parseFloat(e.target.value) || 0;
+                        document.getElementById('calories').value = (kj / 4.184).toFixed(1);
+                    });
+                } else {
+                    nutritionInputs.classList.add('hidden');
+                }
+            });
+            
+            // Handle form submission
+            document.getElementById('foodForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const foodName = document.getElementById('foodName').value;
+                const brand = document.getElementById('brand').value || 'Generic';
+                const quantity = parseInt(document.getElementById('quantity').value);
+                const useManualNutrition = document.getElementById('manualNutrition').checked;
+                
+                let data = {
+                    name: foodName,
+                    brand: brand,
+                    quantity: quantity
+                };
+                
+                if (useManualNutrition) {
+                    data.nutrition = {
+                        calories: parseFloat(document.getElementById('calories').value) || 0,
+                        energy_kj: parseFloat(document.getElementById('energy_kj').value) || 0,
+                        protein: parseFloat(document.getElementById('protein').value) || 0,
+                        carbs: parseFloat(document.getElementById('carbs').value) || 0,
+                        sugars: parseFloat(document.getElementById('sugars').value) || 0,
+                        fat: parseFloat(document.getElementById('fat').value) || 0,
+                        saturated_fat: parseFloat(document.getElementById('saturated_fat').value) || 0,
+                        sodium: parseFloat(document.getElementById('sodium').value) || 0,
+                        fiber: parseFloat(document.getElementById('fiber').value) || 0,
+                        fruits_veg_nuts: parseFloat(document.getElementById('fruits_veg_nuts').value) || 0
+                    };
+                }
+                
+                try {
+                    const response = await fetch('/api/food', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (response.ok) {
+                        // Clear form
+                        document.getElementById('foodForm').reset();
+                        document.getElementById('nutritionInputs').classList.add('hidden');
+                        
+                        // Update display
+                        await updateNutritionData();
+                        await updateFoodList();  // Refresh food list
+                        
+                    } else {
+                        alert('Failed to add food entry. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
