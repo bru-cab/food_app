@@ -883,6 +883,18 @@ def calculate_period_score(entries):
         'daily_nutrition': daily_nutrition
     })
 
+@app.route('/api/food-references/<int:id>', methods=['DELETE'])
+@login_required
+def delete_food_reference(id):
+    """Delete a food reference"""
+    food_ref = FoodReference.query.get_or_404(id)
+    
+    # Delete the food reference
+    db.session.delete(food_ref)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
 if __name__ == '__main__':
     logger.info("Starting Flask application in debug mode")
     app.run(debug=True, port=5001) 
