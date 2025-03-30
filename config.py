@@ -11,8 +11,12 @@ class ModelType(Enum):
     GPT4 = "gpt-4"
 
 class Config:
-    # Database settings
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///food_entries.db'
+    # Database settings - always use PostgreSQL
+    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/food_entries')
+    # Convert postgres:// to postgresql:// if necessary (Railway uses postgres://)
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # API Keys

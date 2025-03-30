@@ -10,6 +10,16 @@ import hashlib
 import base64
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+import logging
+import sys
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='static')
 app.config['SQLALCHEMY_DATABASE_URI'] = Config.SQLALCHEMY_DATABASE_URI
@@ -508,7 +518,7 @@ class FoodEntry(db.Model):
 with app.app_context():
     # Only create tables if they don't exist
     db.create_all()
-    print("Database tables initialized successfully")
+    logger.info("Database tables initialized successfully")
 
 # Authentication decorator
 def login_required(f):
@@ -621,19 +631,19 @@ def get_food_references():
 @app.route('/api/food', methods=['POST'])
 @login_required
 def add_food():
-    print("\n=== Adding new food entry ===")
+    logger.info("\n=== Adding new food entry ===")
     data = request.json
     food_name = data['name'].lower().strip()  # Normalize food name
     quantity = data.get('quantity', 100)  # Default to 100g if not specified
     brand = data.get('brand', 'Generic').strip()  # Get brand name, default to Generic
-    print(f"Food name: {food_name}, Brand: {brand}, Quantity: {quantity}g")
+    logger.info(f"Food name: {food_name}, Brand: {brand}, Quantity: {quantity}g")
     
     nutrition = None
     
     # Check if nutrition info was manually provided
     manual_nutrition = data.get('nutrition')
     if manual_nutrition:
-        print("Using manually provided nutrition info")
+        logger.info("Using manually provided nutrition info")
         nutrition = manual_nutrition
         
         # Store manual nutrition in reference table
@@ -657,12 +667,12 @@ def add_food():
         )
         db.session.add(food_ref)
         db.session.commit()
-        print(f"Stored manual nutrition in reference table for: {food_name}")
+        logger.info(f"Stored manual nutrition in reference table for: {food_name}")
     else:
         # First check if we have this food in our reference database
         reference = FoodReference.find_similar(food_name)
         if reference:
-            print("Found food in reference database")
+            logger.info("Found food in reference database")
             nutrition = {
                 'calories': reference.calories,
                 'energy_kj': reference.energy_kj,
@@ -708,7 +718,7 @@ def add_food():
                 )
                 db.session.add(food_ref)
                 db.session.commit()
-                print(f"Stored AI nutrition in reference table for: {food_name}")
+                logger.info(f"Stored AI nutrition in reference table for: {food_name}")
     
     if nutrition:
         if 'nutri_score' not in locals():
@@ -736,7 +746,7 @@ def add_food():
         
         db.session.add(entry)
         db.session.commit()
-        print(f"Added new food entry for: {food_name}")
+        logger.info(f"Added new food entry for: {food_name}")
         
         return jsonify({'success': True})
     else:
@@ -874,4 +884,5 @@ def calculate_period_score(entries):
     })
 
 if __name__ == '__main__':
+    logger.info("Starting Flask application in debug mode")
     app.run(debug=True, port=5001) 
