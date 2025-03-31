@@ -400,7 +400,7 @@ class FoodReference(db.Model):
     nutri_score = db.Column(db.String(1), nullable=False)
     numeric_score = db.Column(db.Integer, nullable=False)  # Raw Nutri-Score (-15 to +40)
     simple_score = db.Column(db.Integer, nullable=False)  # Normalized 0-100 score
-    is_shared = db.Column(db.Boolean, nullable=False, default=False)  # Whether the food is shared with other users
+    is_shared = db.Column(db.Boolean, nullable=False, default=False, server_default='false')  # Whether the food is shared with other users
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # User who created this food
     creator = db.relationship('User', backref='food_references')
 
