@@ -19,24 +19,34 @@ migrate = Migrate()
 
 def create_app(config_class=Config):
     """Create and configure the Flask application"""
+    logger.info("Starting create_app function in app/__init__.py")
+    
     app = Flask(__name__, static_folder='../static', template_folder='../templates')
+    logger.info("Flask app instance created")
+    
     app.config.from_object(config_class)
+    logger.info("Config loaded")
     
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
+    logger.info("Database extensions initialized")
     
     # Initialize OpenAI if API key is available
     if config_class.OPENAI_API_KEY:
         import openai
         openai.api_key = config_class.OPENAI_API_KEY
+        logger.info("OpenAI initialized")
     
     # Register blueprints
-    from app.routes import auth_bp, main_bp, api_bp
-    
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(main_bp)
-    app.register_blueprint(api_bp, url_prefix='/api')
+    with app.app_context():
+        logger.info("Importing route blueprints")
+        from app.routes import auth_bp, main_bp, api_bp
+        
+        app.register_blueprint(auth_bp)
+        app.register_blueprint(main_bp)
+        app.register_blueprint(api_bp, url_prefix='/api')
+        logger.info("Blueprints registered")
     
     # Serve static files
     @app.route('/static/<path:path>')
