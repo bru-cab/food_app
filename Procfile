@@ -1,1 +1,1 @@
-web: python create_tables.py && gunicorn --bind 0.0.0.0:$PORT run:app 
+web: python execute_sql.py && gunicorn --bind 0.0.0.0:$PORT run:app 
