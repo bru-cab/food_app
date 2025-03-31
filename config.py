@@ -22,7 +22,7 @@ class Config:
     # API Keys
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
-    HUGGINGFACE_API_BASE_URL = "https://api-inference.huggingface.co/pipeline"
+    HUGGINGFACE_API_BASE_URL = "https://api-inference.huggingface.co/models"
 
     # Model settings
     CURRENT_MODEL = ModelType.GPT35
@@ -168,4 +168,183 @@ Rules:
 - alcohol: any alcoholic drink
 
 Important: If it's just meat or fish name, choose whole_foods.
-Respond with ONLY the category name.""" 
+Respond with ONLY the category name."""
+
+    # Food type detection prompts
+    HUGGINGFACE_FOOD_TYPE_PROMPT = """Analyze this food: "{food_name}"
+Return the food type, unit, and weight in this exact format: "type|unit|weight"
+Choose type from: beverages, snacks, fruits, vegetables, meats, grains
+Choose unit from: ml, g, cookie, piece, slice, unit, cup, tablespoon
+
+Rules for units and weights:
+- beverages: use "ml" (1 cup = 240ml)
+- cookies: use "cookie" (Oreo = 11g, chocolate chip = 16g, standard = 13g)
+- crackers: use "unit" (saltine = 3g, graham = 14g, standard = 8g)
+- fruits: use "piece" (apple = 180g, banana = 120g, orange = 130g)
+- bread: use "slice" (white = 25g, whole wheat = 28g, standard = 26g)
+- spreads: use "tablespoon" (15g)
+- packaged snacks: use "unit" with specific weight
+- everything else: use "g"
+
+Example responses:
+"beverages|ml|240" for a cup of drink
+"snacks|cookie|11" for an Oreo cookie
+"fruits|piece|180" for an apple
+"grains|slice|25" for white bread"""
+
+    OPENAI_FOOD_TYPE_SYSTEM_PROMPT = """You are a nutrition expert that categorizes foods and determines their natural serving units with precise weights.
+You must respond in this exact format: "type|unit|weight"
+where:
+- type is one of: beverages, snacks, fruits, vegetables, meats, grains
+- unit is one of: ml, g, cookie, piece, slice, unit, cup, tablespoon
+- weight is the typical weight in grams (or volume in ml) for one unit
+
+Common weights to use:
+Cookies:
+- Oreo: 11g
+- Chocolate chip: 16g
+- Standard cookie: 13g
+
+Crackers:
+- Saltine: 3g
+- Graham: 14g
+- Standard cracker: 8g
+
+Fruits:
+- Apple: 180g
+- Banana: 120g
+- Orange: 130g
+- Standard fruit: 120g
+
+Bread:
+- White bread slice: 25g
+- Whole wheat slice: 28g
+- Standard slice: 26g
+
+Other:
+- Tablespoon: 15g
+- Cup (liquid): 240ml
+- Cup (cereal): 30g
+- Standard snack bar: 35g"""
+
+    OPENAI_FOOD_TYPE_PROMPT = """Analyze this food item: "{food_name}"
+Determine its category, natural serving unit, and typical weight per unit.
+
+Categories and standard measurements:
+
+beverages:
+- Standard cup = 240ml
+- Small glass = 200ml
+- Can = 330ml
+Units: ml
+
+snacks:
+Cookies:
+- Oreo = 11g
+- Chocolate chip = 16g
+- Standard cookie = 13g
+Units: cookie
+
+Crackers:
+- Saltine = 3g
+- Graham = 14g
+- Standard cracker = 8g
+Units: unit
+
+Candy/Bars:
+- Standard chocolate bar = 45g
+- Small candy bar = 35g
+- Energy/protein bar = 60g
+Units: unit
+
+fruits:
+- Apple = 180g
+- Banana = 120g
+- Orange = 130g
+- Standard fruit = 120g
+Units: piece
+
+vegetables:
+- Standard serving = 80g
+- Cup of leafy greens = 30g
+Units: g
+
+meats:
+- Standard portion = 150g
+Units: g
+
+grains:
+Bread:
+- White slice = 25g
+- Whole wheat slice = 28g
+- Standard slice = 26g
+Units: slice
+
+Cereals:
+- Cup of cereal = 30g
+- Standard portion = 45g
+Units: g
+
+Respond with ONLY the category, unit, and weight in this format: "type|unit|weight"
+Example: "snacks|cookie|11" for an Oreo cookie"""
+
+    # Update serving sizes to include unit-based portions with specific weights
+    STANDARD_WEIGHTS = {
+        'cookie': {
+            'oreo': 11,
+            'chocolate_chip': 16,
+            'standard': 13
+        },
+        'cracker': {
+            'saltine': 3,
+            'graham': 14,
+            'standard': 8
+        },
+        'fruit': {
+            'apple': 180,
+            'banana': 120,
+            'orange': 130,
+            'standard': 120
+        },
+        'bread': {
+            'white': 25,
+            'whole_wheat': 28,
+            'standard': 26
+        },
+        'snack_bar': {
+            'chocolate': 45,
+            'energy': 60,
+            'standard': 35
+        },
+        'tablespoon': 15,
+        'cup': {
+            'liquid': 240,
+            'cereal': 30,
+            'leafy_greens': 30
+        }
+    }
+
+    # Food type keywords to help categorize foods
+    FOOD_TYPE_KEYWORDS = {
+        'beverages': ['drink', 'juice', 'soda', 'water', 'coffee', 'tea', 'milk', 'smoothie'],
+        'snacks': ['chips', 'crackers', 'nuts', 'popcorn', 'cookie', 'candy', 'chocolate'],
+        'fruits': ['apple', 'banana', 'orange', 'grape', 'berry', 'fruit'],
+        'vegetables': ['carrot', 'broccoli', 'spinach', 'lettuce', 'vegetable', 'salad'],
+        'meats': ['chicken', 'beef', 'pork', 'fish', 'meat', 'steak', 'salmon'],
+        'grains': ['rice', 'pasta', 'bread', 'cereal', 'oat', 'grain', 'wheat']
+    }
+
+    @staticmethod
+    def get_food_type(food_name):
+        """Determine the food type based on keywords in the food name"""
+        food_name = food_name.lower()
+        for food_type, keywords in Config.FOOD_TYPE_KEYWORDS.items():
+            if any(keyword in food_name for keyword in keywords):
+                return food_type
+        return 'default'
+
+    @staticmethod
+    def get_serving_sizes(food_name):
+        """Get appropriate serving sizes for a food item"""
+        food_type = Config.get_food_type(food_name)
+        return Config.SERVING_SIZES.get(food_type, Config.SERVING_SIZES['default']) 

@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from datetime import datetime, timedelta
 import os
 import openai
@@ -26,6 +27,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = Config.SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = Config.SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')  # For session management
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)  # Initialize Flask-Migrate
 
 # Initialize OpenAI if API key is available
 if Config.OPENAI_API_KEY:
@@ -383,8 +385,8 @@ class FoodCategory:
 
 class FoodReference(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    brand = db.Column(db.String(100), nullable=False, default='Generic')  # Add brand field
+    name = db.Column(db.String(100), nullable=False)
+    brand = db.Column(db.String(100), nullable=False, default='Generic')
     calories = db.Column(db.Float, nullable=False)
     energy_kj = db.Column(db.Float, nullable=False)
     protein = db.Column(db.Float, nullable=False)
@@ -398,12 +400,19 @@ class FoodReference(db.Model):
     nutri_score = db.Column(db.String(1), nullable=False)
     numeric_score = db.Column(db.Integer, nullable=False)  # Raw Nutri-Score (-15 to +40)
     simple_score = db.Column(db.Integer, nullable=False)  # Normalized 0-100 score
+    is_shared = db.Column(db.Boolean, nullable=False, default=False)  # Whether the food is shared with other users
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # User who created this food
+    creator = db.relationship('User', backref='food_references')
 
     @staticmethod
-    def find_similar(food_name):
-        """Find food with similar name"""
+    def find_similar(food_name, user_id):
+        """Find food with similar name that is either shared or owned by the user"""
         return FoodReference.query.filter(
-            FoodReference.name.ilike(f"%{food_name}%")
+            FoodReference.name.ilike(f"%{food_name}%"),
+            db.or_(
+                FoodReference.is_shared == True,
+                FoodReference.creator_id == user_id
+            )
         ).first()
 
     def to_dict(self):
@@ -424,7 +433,9 @@ class FoodReference(db.Model):
             'fruits_veg_nuts': self.fruits_veg_nuts,
             'nutri_score': self.nutri_score,
             'numeric_score': self.numeric_score,
-            'simple_score': self.simple_score
+            'simple_score': self.simple_score,
+            'is_shared': self.is_shared,
+            'creator': self.creator.username if self.is_shared else None
         }
 
 class User(db.Model):
@@ -617,6 +628,14 @@ def get_food_references():
     search = request.args.get('search', '').lower().strip()
     query = FoodReference.query
     
+    # Filter to show only shared foods or foods created by the current user
+    query = query.filter(
+        db.or_(
+            FoodReference.is_shared == True,
+            FoodReference.creator_id == session['user_id']
+        )
+    )
+    
     if search:
         query = query.filter(
             db.or_(
@@ -636,7 +655,8 @@ def add_food():
     food_name = data['name'].lower().strip()  # Normalize food name
     quantity = data.get('quantity', 100)  # Default to 100g if not specified
     brand = data.get('brand', 'Generic').strip()  # Get brand name, default to Generic
-    logger.info(f"Food name: {food_name}, Brand: {brand}, Quantity: {quantity}g")
+    is_shared = data.get('is_shared', False)  # Get sharing preference
+    logger.info(f"Food name: {food_name}, Brand: {brand}, Quantity: {quantity}g, Shared: {is_shared}")
     
     nutrition = None
     
@@ -663,14 +683,16 @@ def add_food():
             fruits_veg_nuts=nutrition.get('fruits_veg_nuts', 0),
             nutri_score=nutri_score['grade'],
             numeric_score=nutri_score['score'],
-            simple_score=nutri_score['simple_score']
+            simple_score=nutri_score['simple_score'],
+            is_shared=is_shared,
+            creator_id=session['user_id']
         )
         db.session.add(food_ref)
         db.session.commit()
         logger.info(f"Stored manual nutrition in reference table for: {food_name}")
     else:
         # First check if we have this food in our reference database
-        reference = FoodReference.find_similar(food_name)
+        reference = FoodReference.find_similar(food_name, session['user_id'])
         if reference:
             logger.info("Found food in reference database")
             nutrition = {
@@ -714,7 +736,9 @@ def add_food():
                     fruits_veg_nuts=nutrition.get('fruits_veg_nuts', 0),
                     nutri_score=nutri_score['grade'],
                     numeric_score=nutri_score['score'],
-                    simple_score=nutri_score['simple_score']
+                    simple_score=nutri_score['simple_score'],
+                    is_shared=is_shared,
+                    creator_id=session['user_id']
                 )
                 db.session.add(food_ref)
                 db.session.commit()
@@ -779,23 +803,178 @@ def get_daily_score():
 @login_required
 def get_weekly_score():
     end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=6)
+    # Calculate the Monday of the current week
+    start_date = end_date - timedelta(days=end_date.weekday())  # weekday() returns 0 for Monday
+    
     entries = FoodEntry.query.filter(
         FoodEntry.date.between(start_date, end_date),
-        FoodEntry.user_id == session['user_id']  # Filter by user
-    ).all()
-    return calculate_period_score(entries)
+        FoodEntry.user_id == session['user_id']
+    ).order_by(FoodEntry.date.desc()).all()
+    
+    # If all entries are from today, return today's score
+    if all(entry.date == end_date for entry in entries):
+        return calculate_period_score(entries)
+    
+    # Group entries by date
+    entries_by_date = {}
+    for entry in entries:
+        date_str = entry.date.strftime('%Y-%m-%d')
+        if date_str not in entries_by_date:
+            entries_by_date[date_str] = []
+        entries_by_date[date_str].append(entry)
+    
+    # Calculate daily scores and average them
+    daily_scores = []
+    total_nutrition = {
+        'calories': 0,
+        'energy_kj': 0,
+        'protein': 0,
+        'carbs': 0,
+        'sugars': 0,
+        'fat': 0,
+        'saturated_fat': 0,
+        'sodium': 0,
+        'fiber': 0,
+        'fruits_veg_nuts': 0
+    }
+    
+    for date, day_entries in entries_by_date.items():
+        daily_score = calculate_period_score(day_entries)
+        daily_data = daily_score.get_json()
+        daily_scores.append({
+            'date': date,
+            'score': daily_data['score'],
+            'simple_score': daily_data['simple_score'],
+            'grade': daily_data['grade'],
+            'nutrition': daily_data['daily_nutrition']
+        })
+        
+        # Add to total nutrition
+        for key in total_nutrition:
+            total_nutrition[key] += daily_data['daily_nutrition'][key]
+    
+    # Calculate averages
+    num_days = len(entries_by_date)
+    if num_days > 0:
+        for key in total_nutrition:
+            if key == 'fruits_veg_nuts':
+                # For percentages, use arithmetic mean
+                total_nutrition[key] = round(total_nutrition[key] / num_days, 1)
+            else:
+                # For absolute values, divide by number of days
+                total_nutrition[key] = round(total_nutrition[key] / num_days, 1)
+        
+        # Calculate overall score based on average nutrition
+        nutri_score = FoodCategory.calculate_nutri_score(total_nutrition)
+        
+        return jsonify({
+            'score': nutri_score['score'],
+            'simple_score': nutri_score['simple_score'],
+            'grade': nutri_score['grade'],
+            'daily_scores': daily_scores,
+            'daily_nutrition': total_nutrition,
+            'num_days': num_days
+        })
+    else:
+        return jsonify({
+            'score': 0,
+            'simple_score': 50,
+            'grade': 'C',
+            'daily_scores': [],
+            'daily_nutrition': total_nutrition,
+            'num_days': 0
+        })
 
 @app.route('/api/monthly-score')
 @login_required
 def get_monthly_score():
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=29)
+    today = datetime.now().date()
+    # Calculate the first day of the current month
+    start_date = today.replace(day=1)
+    # Calculate the last day of the current month
+    if today.month == 12:
+        end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        end_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    
     entries = FoodEntry.query.filter(
         FoodEntry.date.between(start_date, end_date),
-        FoodEntry.user_id == session['user_id']  # Filter by user
-    ).all()
-    return calculate_period_score(entries)
+        FoodEntry.user_id == session['user_id']
+    ).order_by(FoodEntry.date.desc()).all()
+    
+    # If all entries are from today, return today's score
+    if all(entry.date == today for entry in entries):
+        return calculate_period_score(entries)
+    
+    # Group entries by date
+    entries_by_date = {}
+    for entry in entries:
+        date_str = entry.date.strftime('%Y-%m-%d')
+        if date_str not in entries_by_date:
+            entries_by_date[date_str] = []
+        entries_by_date[date_str].append(entry)
+    
+    # Calculate daily scores and average them
+    daily_scores = []
+    total_nutrition = {
+        'calories': 0,
+        'energy_kj': 0,
+        'protein': 0,
+        'carbs': 0,
+        'sugars': 0,
+        'fat': 0,
+        'saturated_fat': 0,
+        'sodium': 0,
+        'fiber': 0,
+        'fruits_veg_nuts': 0
+    }
+    
+    for date, day_entries in entries_by_date.items():
+        daily_score = calculate_period_score(day_entries)
+        daily_data = daily_score.get_json()
+        daily_scores.append({
+            'date': date,
+            'score': daily_data['score'],
+            'simple_score': daily_data['simple_score'],
+            'grade': daily_data['grade'],
+            'nutrition': daily_data['daily_nutrition']
+        })
+        
+        # Add to total nutrition
+        for key in total_nutrition:
+            total_nutrition[key] += daily_data['daily_nutrition'][key]
+    
+    # Calculate averages
+    num_days = len(entries_by_date)
+    if num_days > 0:
+        for key in total_nutrition:
+            if key == 'fruits_veg_nuts':
+                # For percentages, use arithmetic mean
+                total_nutrition[key] = round(total_nutrition[key] / num_days, 1)
+            else:
+                # For absolute values, divide by number of days
+                total_nutrition[key] = round(total_nutrition[key] / num_days, 1)
+        
+        # Calculate overall score based on average nutrition
+        nutri_score = FoodCategory.calculate_nutri_score(total_nutrition)
+        
+        return jsonify({
+            'score': nutri_score['score'],
+            'simple_score': nutri_score['simple_score'],
+            'grade': nutri_score['grade'],
+            'daily_scores': daily_scores,
+            'daily_nutrition': total_nutrition,
+            'num_days': num_days
+        })
+    else:
+        return jsonify({
+            'score': 0,
+            'simple_score': 50,
+            'grade': 'C',
+            'daily_scores': [],
+            'daily_nutrition': total_nutrition,
+            'num_days': 0
+        })
 
 def calculate_period_score(entries):
     if not entries:
@@ -818,7 +997,36 @@ def calculate_period_score(entries):
             }
         })
     
-    # Calculate nutrition totals using base values and quantity
+    # If there's only one entry, return its score directly
+    if len(entries) == 1:
+        entry = entries[0]
+        nutrition = entry.get_adjusted_nutrition()
+        return jsonify({
+            'score': entry.numeric_score,
+            'simple_score': entry.simple_score,
+            'grade': entry.nutri_score,
+            'entries': [{
+                'id': entry.id,
+                'name': entry.name,
+                'quantity': entry.quantity,
+                'nutrition': nutrition,
+                'date': entry.date.strftime('%Y-%m-%d')
+            }],
+            'daily_nutrition': {
+                'calories': nutrition['calories'],
+                'energy_kj': nutrition['energy_kj'],
+                'protein': nutrition['protein'],
+                'carbs': nutrition['carbs'],
+                'sugars': nutrition['sugars'],
+                'fat': nutrition['fat'],
+                'saturated_fat': nutrition['saturated_fat'],
+                'sodium': nutrition['sodium'],
+                'fiber': nutrition['fiber'],
+                'fruits_veg_nuts': nutrition['fruits_veg_nuts']
+            }
+        })
+    
+    # For multiple entries, calculate weighted average
     daily_nutrition = {
         'calories': 0,
         'energy_kj': 0,
@@ -832,34 +1040,13 @@ def calculate_period_score(entries):
         'fruits_veg_nuts': 0
     }
     
+    total_calories = 0
     entries_data = []
+    
+    # First pass: calculate total calories and collect entries data
     for entry in entries:
-        # Calculate adjusted nutrition for this entry
         nutrition = entry.get_adjusted_nutrition()
-        
-        # Add to daily totals using base values and quantity
-        factor = entry.quantity / 100.0
-        daily_nutrition['calories'] += round((entry.calories or 0) * factor, 1)
-        daily_nutrition['energy_kj'] += round((entry.energy_kj or 0) * factor, 1)
-        daily_nutrition['protein'] += round((entry.protein or 0) * factor, 1)
-        daily_nutrition['carbs'] += round((entry.carbs or 0) * factor, 1)
-        daily_nutrition['sugars'] += round((entry.sugars or 0) * factor, 1)
-        daily_nutrition['fat'] += round((entry.fat or 0) * factor, 1)
-        daily_nutrition['saturated_fat'] += round((entry.saturated_fat or 0) * factor, 1)
-        daily_nutrition['sodium'] += round((entry.sodium or 0) * factor, 1)
-        daily_nutrition['fiber'] += round((entry.fiber or 0) * factor, 1)
-        
-        # For fruits/veg/nuts percentage, we need to weight it by the quantity
-        if len(entries) == 1:
-            daily_nutrition['fruits_veg_nuts'] = entry.fruits_veg_nuts or 0
-        else:
-            # For multiple entries, calculate weighted average
-            total_quantity = sum(e.quantity for e in entries)
-            daily_nutrition['fruits_veg_nuts'] = sum(
-                (e.fruits_veg_nuts or 0) * (e.quantity / total_quantity) 
-                for e in entries
-            )
-        
+        total_calories += nutrition['calories']
         entries_data.append({
             'id': entry.id,
             'name': entry.name,
@@ -867,6 +1054,19 @@ def calculate_period_score(entries):
             'nutrition': nutrition,
             'date': entry.date.strftime('%Y-%m-%d')
         })
+    
+    # Second pass: calculate weighted averages based on caloric contribution
+    for entry in entries:
+        nutrition = entry.get_adjusted_nutrition()
+        weight = nutrition['calories'] / total_calories if total_calories > 0 else 1.0 / len(entries)
+        
+        for key in daily_nutrition:
+            if key == 'fruits_veg_nuts':
+                # For fruits/veg/nuts, use weighted average
+                daily_nutrition[key] += nutrition[key] * weight
+            else:
+                # For other nutrients, sum the absolute values
+                daily_nutrition[key] += nutrition[key]
     
     # Round final totals
     for key in daily_nutrition:
@@ -876,9 +1076,9 @@ def calculate_period_score(entries):
     nutri_score = FoodCategory.calculate_nutri_score(daily_nutrition)
     
     return jsonify({
-        'score': nutri_score['score'],  # Raw Nutri-Score (-15 to +40)
-        'simple_score': nutri_score['simple_score'],  # Normalized 0-100 score
-        'grade': nutri_score['grade'],  # Letter grade A-E
+        'score': nutri_score['score'],
+        'simple_score': nutri_score['simple_score'],
+        'grade': nutri_score['grade'],
         'entries': entries_data,
         'daily_nutrition': daily_nutrition
     })
@@ -889,11 +1089,209 @@ def delete_food_reference(id):
     """Delete a food reference"""
     food_ref = FoodReference.query.get_or_404(id)
     
+    # Only allow deletion if you created the food
+    if food_ref.creator_id != session['user_id']:
+        return jsonify({'error': 'Unauthorized - you can only delete foods you created'}), 403
+    
     # Delete the food reference
     db.session.delete(food_ref)
     db.session.commit()
     
     return jsonify({'success': True})
+
+@app.route('/api/serving-sizes/<food_name>')
+def get_serving_sizes(food_name):
+    """Get appropriate serving sizes for a food item"""
+    serving_sizes = Config.get_serving_sizes(food_name)
+    return jsonify(serving_sizes)
+
+@app.route('/api/food-type/<food_name>')
+def get_food_type_info(food_name):
+    """Get food type information using LLM"""
+    try:
+        # Use the current model to get food type info
+        if Config.CURRENT_MODEL == ModelType.FREE:
+            prompt = Config.HUGGINGFACE_FOOD_TYPE_PROMPT.format(food_name=food_name)
+            headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
+            api_url = f"{Config.HUGGINGFACE_API_BASE_URL}/models/google/flan-t5-base"
+            
+            response = requests.post(api_url, headers=headers, json={
+                "inputs": prompt,
+                "parameters": {"max_length": 50}
+            })
+            
+            if response.status_code == 200:
+                result = response.json()[0]["generated_text"].strip().lower()
+                if '|' in result:
+                    parts = result.split('|')
+                    if len(parts) == 3:
+                        food_type, unit, weight = parts
+                        weight = float(weight)
+                    else:
+                        food_type = parts[0]
+                        unit = parts[1] if len(parts) > 1 else 'g'
+                        weight = None
+                else:
+                    food_type = result
+                    unit = 'g'
+                    weight = None
+            else:
+                food_type = Config.get_food_type(food_name)
+                unit = 'g'
+                weight = None
+        else:
+            if Config.OPENAI_API_KEY:
+                messages = [
+                    {"role": "system", "content": Config.OPENAI_FOOD_TYPE_SYSTEM_PROMPT},
+                    {"role": "user", "content": Config.OPENAI_FOOD_TYPE_PROMPT.format(food_name=food_name)}
+                ]
+                
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=50
+                )
+                
+                if response.choices:
+                    result = response.choices[0].message.content.strip().lower()
+                    if '|' in result:
+                        parts = result.split('|')
+                        if len(parts) == 3:
+                            food_type, unit, weight = parts
+                            weight = float(weight)
+                        else:
+                            food_type = parts[0]
+                            unit = parts[1] if len(parts) > 1 else 'g'
+                            weight = None
+                    else:
+                        food_type = result
+                        unit = 'g'
+                        weight = None
+                else:
+                    food_type = Config.get_food_type(food_name)
+                    unit = 'g'
+                    weight = None
+            else:
+                food_type = Config.get_food_type(food_name)
+                unit = 'g'
+                weight = None
+        
+        # If we didn't get a weight from the model, try to get it from our standard weights
+        if weight is None and unit in ['cookie', 'unit', 'piece', 'slice', 'tablespoon', 'cup']:
+            food_name_lower = food_name.lower()
+            
+            if unit == 'cookie':
+                if 'oreo' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cookie']['oreo']
+                elif 'chocolate chip' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cookie']['chocolate_chip']
+                else:
+                    weight = Config.STANDARD_WEIGHTS['cookie']['standard']
+            
+            elif unit == 'unit' and 'cracker' in food_name_lower:
+                if 'saltine' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cracker']['saltine']
+                elif 'graham' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cracker']['graham']
+                else:
+                    weight = Config.STANDARD_WEIGHTS['cracker']['standard']
+            
+            elif unit == 'piece' and food_type == 'fruits':
+                if 'apple' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['fruit']['apple']
+                elif 'banana' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['fruit']['banana']
+                elif 'orange' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['fruit']['orange']
+                else:
+                    weight = Config.STANDARD_WEIGHTS['fruit']['standard']
+            
+            elif unit == 'slice' and 'bread' in food_name_lower:
+                if 'white' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['bread']['white']
+                elif 'whole wheat' in food_name_lower or 'wholemeal' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['bread']['whole_wheat']
+                else:
+                    weight = Config.STANDARD_WEIGHTS['bread']['standard']
+            
+            elif unit == 'tablespoon':
+                weight = Config.STANDARD_WEIGHTS['tablespoon']
+            
+            elif unit == 'cup':
+                if food_type == 'beverages':
+                    weight = Config.STANDARD_WEIGHTS['cup']['liquid']
+                elif 'cereal' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cup']['cereal']
+                elif 'leafy' in food_name_lower or 'salad' in food_name_lower:
+                    weight = Config.STANDARD_WEIGHTS['cup']['leafy_greens']
+                else:
+                    weight = Config.STANDARD_WEIGHTS['cup']['liquid']
+        
+        # Get serving sizes based on the unit and weight
+        if unit in ['cookie', 'unit', 'piece', 'slice']:
+            serving_sizes = {
+                'unit': unit,
+                'sizes': [
+                    {'label': f'1 {unit}', 'value': weight},
+                    {'label': f'2 {unit}s', 'value': weight * 2},
+                    {'label': f'3 {unit}s', 'value': weight * 3},
+                    {'label': f'Custom amount ({unit}s)', 'value': 'custom'}
+                ]
+            }
+        elif unit == 'tablespoon':
+            serving_sizes = {
+                'unit': unit,
+                'sizes': [
+                    {'label': '1 tablespoon', 'value': weight},
+                    {'label': '2 tablespoons', 'value': weight * 2},
+                    {'label': '3 tablespoons', 'value': weight * 3},
+                    {'label': 'Custom amount (tbsp)', 'value': 'custom'}
+                ]
+            }
+        elif unit == 'cup' and food_type == 'beverages':
+            serving_sizes = {
+                'unit': 'ml',
+                'sizes': [
+                    {'label': 'Small glass (200ml)', 'value': 200},
+                    {'label': 'Regular glass (250ml)', 'value': 250},
+                    {'label': 'Large glass (330ml)', 'value': 330},
+                    {'label': 'Custom volume (ml)', 'value': 'custom'}
+                ]
+            }
+        else:
+            serving_sizes = Config.SERVING_SIZES.get(food_type, Config.SERVING_SIZES['default'])
+        
+        # Get default quantity based on food type and unit
+        default_quantity = serving_sizes['sizes'][1]['value'] if len(serving_sizes['sizes']) > 1 else weight or 100
+        
+        # For display purposes, convert unit 'unit' to a more natural name
+        display_unit = unit
+        if unit == 'unit':
+            display_unit = 'piece'
+        
+        return jsonify({
+            'food_type': food_type,
+            'serving_sizes': serving_sizes,
+            'default_quantity': default_quantity,
+            'unit': unit,
+            'display_unit': display_unit,
+            'weight_per_unit': weight
+        })
+        
+    except Exception as e:
+        print(f"Error getting food type info: {str(e)}")
+        # Fallback to basic detection
+        food_type = Config.get_food_type(food_name)
+        serving_sizes = Config.SERVING_SIZES.get(food_type, Config.SERVING_SIZES['default'])
+        return jsonify({
+            'food_type': food_type,
+            'serving_sizes': serving_sizes,
+            'default_quantity': 100,
+            'unit': 'g',
+            'display_unit': 'g',
+            'weight_per_unit': None
+        })
 
 if __name__ == '__main__':
     logger.info("Starting Flask application in debug mode")

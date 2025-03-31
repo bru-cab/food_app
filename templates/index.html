@@ -52,19 +52,63 @@
 
                 <!-- Daily Score Card -->
                 <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-                    <h2 class="text-2xl font-semibold mb-4">Today's Score</h2>
-                    <div class="flex items-center justify-between">
-                        <div class="text-center">
-                            <div class="text-4xl font-bold mb-2" id="dailyScore">--</div>
-                            <div class="text-gray-600">Simple Score</div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-semibold">Nutrition Score</h2>
+                        <div class="flex space-x-2">
+                            <button id="dailyTab" class="px-3 py-1 rounded-lg bg-blue-600 text-white">Daily</button>
+                            <button id="weeklyTab" class="px-3 py-1 rounded-lg bg-gray-200 text-gray-700">Weekly</button>
+                            <button id="monthlyTab" class="px-3 py-1 rounded-lg bg-gray-200 text-gray-700">Monthly</button>
                         </div>
-                        <div class="text-center">
-                            <div class="text-4xl font-bold mb-2" id="rawScore">--</div>
-                            <div class="text-gray-600">Raw Score</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-6">
+                        <!-- Score Section -->
+                        <div class="flex items-center justify-between space-x-8">
+                            <!-- Simple Score -->
+                            <div class="text-center flex-1">
+                                <div class="flex flex-col items-center">
+                                    <span id="simpleScoreText" class="text-4xl font-bold">--</span>
+                                    <span class="text-sm text-gray-500 mt-2">out of 100</span>
+                                </div>
+                                <div class="text-gray-600 mt-4">Simple Score</div>
+                            </div>
+
+                            <!-- Raw Score -->
+                            <div class="text-center flex-1">
+                                <div class="flex flex-col items-center">
+                                    <span id="rawScoreText" class="text-4xl font-bold">--</span>
+                                    <span class="text-sm text-gray-500 mt-2">-15 to +40</span>
+                                </div>
+                                <div class="text-gray-600 mt-4">Raw Score</div>
+                            </div>
+
+                            <!-- Grade -->
+                            <div class="text-center flex-1">
+                                <div class="flex flex-col items-center">
+                                    <div id="nutriscoreDisplay" class="mb-2">--</div>
+                                    <div class="text-gray-600">Grade</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="text-center">
-                            <div id="nutriscore" class="text-4xl font-bold px-3 py-1.5 rounded-full text-white">--</div>
-                            <div class="text-gray-600">Grade</div>
+                        <!-- Nutrition Section -->
+                        <div class="border-l pl-6">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold mb-1" id="caloriesDisplay">--</div>
+                                    <div class="text-sm text-gray-600">Calories</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold mb-1" id="proteinDisplay">--</div>
+                                    <div class="text-sm text-gray-600">Protein</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold mb-1" id="carbsDisplay">--</div>
+                                    <div class="text-sm text-gray-600">Carbs</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold mb-1" id="fatDisplay">--</div>
+                                    <div class="text-sm text-gray-600">Fat</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -86,13 +130,25 @@
                             </div>
                         </div>
                         <div>
-                            <label for="quantity" class="block text-sm font-medium text-gray-700">Quantity (g)</label>
-                            <input type="number" id="quantity" name="quantity" value="100" min="1" required
-                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <label for="quantity" class="block text-sm font-medium text-gray-700">Quantity</label>
+                            <div class="mt-1 flex space-x-2">
+                                <select id="servingSize" name="servingSize" 
+                                        class="block w-2/3 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="custom">Custom size</option>
+                                </select>
+                                <input type="number" id="quantity" name="quantity" min="1" 
+                                       class="block w-1/3 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                       placeholder="g/ml">
+                            </div>
+                            <div id="foodTypeIndicator" class="text-sm text-gray-600 mt-1"></div>
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" id="manualNutrition" name="manualNutrition" class="mr-2">
                             <label for="manualNutrition" class="text-sm font-medium text-gray-700">Enter nutrition information manually</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="shareFood" name="shareFood" class="mr-2">
+                            <label for="shareFood" class="text-sm font-medium text-gray-700">Share this food with other users</label>
                         </div>
                         <div id="nutritionInputs" class="hidden space-y-4">
                             <div class="grid grid-cols-2 gap-4">
@@ -192,27 +248,34 @@
         // Function to update nutrition data
         async function updateNutritionData() {
             try {
-                const response = await fetch('/api/daily-score');
-                const data = await response.json();
+                // Fetch all scores
+                const [dailyResponse, weeklyResponse, monthlyResponse] = await Promise.all([
+                    fetch('/api/daily-score'),
+                    fetch('/api/weekly-score'),
+                    fetch('/api/monthly-score')
+                ]);
                 
-                // Update scores
-                document.getElementById('dailyScore').textContent = data.simple_score;
-                document.getElementById('rawScore').textContent = data.score;
+                const [dailyData, weeklyData, monthlyData] = await Promise.all([
+                    dailyResponse.json(),
+                    weeklyResponse.json(),
+                    monthlyResponse.json()
+                ]);
                 
-                // Update grade with color and image
-                const nutriscoreElement = document.getElementById('nutriscore');
-                nutriscoreElement.innerHTML = `
-                    <img src="${getNutriScoreImage(data.grade)}" 
-                         alt="Nutri-Score ${data.grade}" 
-                         class="h-12 w-auto">
-                `;
-                nutriscoreElement.className = `flex items-center justify-center px-3 py-1.5 rounded-lg ${getNutriScoreStyle(data.grade)}`;
+                // Store the data globally
+                window.scoreData = {
+                    daily: dailyData,
+                    weekly: weeklyData,
+                    monthly: monthlyData
+                };
+                
+                // Show daily data by default
+                updateScoreDisplay('daily');
                 
                 // Update food entries
                 const entriesContainer = document.getElementById('foodEntries');
                 entriesContainer.innerHTML = '';
                 
-                data.entries.forEach(entry => {
+                dailyData.entries.forEach(entry => {
                     const entryElement = document.createElement('div');
                     entryElement.className = 'flex items-center justify-between p-4 bg-gray-50 rounded-lg';
                     entryElement.innerHTML = `
@@ -244,6 +307,46 @@
             } catch (error) {
                 console.error('Error:', error);
             }
+        }
+
+        // Function to update the score display based on selected period
+        function updateScoreDisplay(period) {
+            const data = window.scoreData[period];
+            if (!data) return;
+            
+            // Update simple score
+            const simpleScoreText = document.getElementById('simpleScoreText');
+            simpleScoreText.textContent = data.simple_score;
+            
+            // Update raw score
+            const rawScoreText = document.getElementById('rawScoreText');
+            rawScoreText.textContent = data.score;
+            
+            // Update nutriscore
+            const nutriscoreElement = document.getElementById('nutriscoreDisplay');
+            nutriscoreElement.innerHTML = `
+                <img src="${getNutriScoreImage(data.grade)}" 
+                     alt="Nutri-Score ${data.grade}" 
+                     class="h-8 w-auto">
+            `;
+            nutriscoreElement.className = `flex items-center justify-center px-2 py-1 rounded-lg ${getNutriScoreStyle(data.grade)}`;
+            
+            // Update nutrition info
+            const nutrition = data.daily_nutrition;
+            document.getElementById('caloriesDisplay').textContent = Math.round(nutrition.calories);
+            document.getElementById('proteinDisplay').textContent = `${Math.round(nutrition.protein)}g`;
+            document.getElementById('carbsDisplay').textContent = `${Math.round(nutrition.carbs)}g`;
+            document.getElementById('fatDisplay').textContent = `${Math.round(nutrition.fat)}g`;
+            
+            // Update tab styles
+            ['daily', 'weekly', 'monthly'].forEach(tab => {
+                const button = document.getElementById(`${tab}Tab`);
+                if (tab === period) {
+                    button.className = 'px-3 py-1 rounded-lg bg-blue-600 text-white';
+                } else {
+                    button.className = 'px-3 py-1 rounded-lg bg-gray-200 text-gray-700';
+                }
+            });
         }
 
         // Function to delete a food entry
@@ -320,7 +423,10 @@
                         <div class="flex justify-between items-start">
                             <div>
                                 <div class="font-semibold">${food.name}</div>
-                                <div class="text-sm text-gray-600">${food.brand}</div>
+                                <div class="text-sm text-gray-600">
+                                    ${food.brand}
+                                    ${food.is_shared ? `<span class="text-blue-600 ml-2">Shared by ${food.creator}</span>` : ''}
+                                </div>
                             </div>
                             <div class="flex items-center space-x-2">
                                 <div class="text-center">
@@ -374,6 +480,137 @@
             document.getElementById('fiber').value = food.fiber;
             document.getElementById('fruits_veg_nuts').value = food.fruits_veg_nuts;
         }
+
+        // Function to update serving sizes based on food name
+        async function updateServingSizes(foodName) {
+            if (!foodName) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/food-type/${encodeURIComponent(foodName)}`);
+                const data = await response.json();
+                
+                const servingSizeSelect = document.getElementById('servingSize');
+                const quantityInput = document.getElementById('quantity');
+                const quantityLabel = document.querySelector('label[for="quantity"]');
+                
+                // Clear previous options
+                servingSizeSelect.innerHTML = '';
+                
+                // Add serving size options
+                data.serving_sizes.sizes.forEach(size => {
+                    const option = document.createElement('option');
+                    option.value = size.value;
+                    option.textContent = size.label;
+                    servingSizeSelect.appendChild(option);
+                });
+                
+                // Update quantity label with the appropriate unit
+                const displayUnit = data.display_unit;
+                quantityLabel.textContent = `Quantity (${displayUnit === 'ml' ? 'ml' : 'g'})`;
+                
+                // Set default quantity
+                if (data.default_quantity) {
+                    quantityInput.value = data.default_quantity;
+                }
+                
+                // Store weight per unit for calculations
+                servingSizeSelect.dataset.weightPerUnit = data.weight_per_unit || '';
+                servingSizeSelect.dataset.unit = data.unit;
+                servingSizeSelect.dataset.displayUnit = data.display_unit;
+                
+                // Update quantity input attributes based on unit
+                if (data.unit === 'ml') {
+                    quantityInput.setAttribute('step', '10');
+                    quantityInput.setAttribute('min', '10');
+                } else {
+                    quantityInput.setAttribute('step', '1');
+                    quantityInput.setAttribute('min', '1');
+                }
+                
+                // Show food type indicator
+                const foodTypeIndicator = document.getElementById('foodTypeIndicator');
+                if (foodTypeIndicator) {
+                    foodTypeIndicator.textContent = `Food Type: ${data.food_type}`;
+                    foodTypeIndicator.style.display = 'block';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching serving sizes:', error);
+            }
+        }
+
+        // Function to handle serving size changes
+        function handleServingSizeChange(event) {
+            const servingSizeSelect = event.target;
+            const selectedValue = servingSizeSelect.value;
+            const quantityInput = document.getElementById('quantity');
+            const weightPerUnit = parseFloat(servingSizeSelect.dataset.weightPerUnit);
+            const unit = servingSizeSelect.dataset.unit;
+            const displayUnit = servingSizeSelect.dataset.displayUnit;
+            
+            if (selectedValue === 'custom') {
+                // For custom amount, enable the quantity input
+                quantityInput.removeAttribute('readonly');
+                quantityInput.focus();
+                
+                // Update label to show the appropriate unit
+                const quantityLabel = document.querySelector('label[for="quantity"]');
+                if (unit === 'ml') {
+                    quantityLabel.textContent = 'Quantity (ml)';
+                } else if (weightPerUnit) {
+                    quantityLabel.textContent = `Quantity (${displayUnit}s)`;
+                } else {
+                    quantityLabel.textContent = 'Quantity (g)';
+                }
+            } else {
+                // For preset amounts, set the quantity and make it readonly
+                const value = parseFloat(selectedValue);
+                quantityInput.value = value;
+                quantityInput.setAttribute('readonly', 'true');
+                
+                // Update label to show equivalent weight if available
+                const quantityLabel = document.querySelector('label[for="quantity"]');
+                if (unit === 'ml') {
+                    quantityLabel.textContent = 'Quantity (ml)';
+                } else if (weightPerUnit) {
+                    const pieces = value / weightPerUnit;
+                    const weightInGrams = value;
+                    quantityLabel.textContent = `Quantity (${pieces} ${displayUnit}${pieces > 1 ? 's' : ''} = ${weightInGrams}g)`;
+                } else {
+                    quantityLabel.textContent = 'Quantity (g)';
+                }
+            }
+        }
+
+        // Debounce function to limit API calls
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Update serving sizes when food name changes (with debounce)
+        const debouncedUpdateServingSizes = debounce((value) => {
+            if (value.length >= 2) {  // Only update if at least 2 characters
+                updateServingSizes(value);
+            } else {
+                // Clear food type indicator if input is too short
+                const foodTypeIndicator = document.getElementById('foodTypeIndicator');
+                foodTypeIndicator.style.display = 'none';
+            }
+        }, 300);
+
+        document.getElementById('foodName').addEventListener('input', (e) => {
+            debouncedUpdateServingSizes(e.target.value);
+        });
 
         // Event Listeners
         document.addEventListener('DOMContentLoaded', () => {
@@ -431,6 +668,9 @@
                 }
             });
             
+            // Handle serving size selection
+            document.getElementById('servingSize').addEventListener('change', handleServingSizeChange);
+            
             // Handle form submission
             document.getElementById('foodForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -439,11 +679,18 @@
                 const brand = document.getElementById('brand').value || 'Generic';
                 const quantity = parseInt(document.getElementById('quantity').value);
                 const useManualNutrition = document.getElementById('manualNutrition').checked;
+                const isShared = document.getElementById('shareFood').checked;
+                
+                if (!quantity || isNaN(quantity)) {
+                    alert('Please enter a valid quantity');
+                    return;
+                }
                 
                 let data = {
                     name: foodName,
                     brand: brand,
-                    quantity: quantity
+                    quantity: quantity,
+                    is_shared: isShared
                 };
                 
                 if (useManualNutrition) {
@@ -487,6 +734,11 @@
                     alert('An error occurred. Please try again.');
                 }
             });
+            
+            // Add tab click handlers
+            document.getElementById('dailyTab').addEventListener('click', () => updateScoreDisplay('daily'));
+            document.getElementById('weeklyTab').addEventListener('click', () => updateScoreDisplay('weekly'));
+            document.getElementById('monthlyTab').addEventListener('click', () => updateScoreDisplay('monthly'));
         });
     </script>
 </body>
