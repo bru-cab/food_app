@@ -71,7 +71,7 @@ class FoodEntry(db.Model):
     brand = db.Column(db.String(100), nullable=True, default=None)  # New field for brand
     description = db.Column(db.String(200), nullable=True, default=None)  # New field for description
     meal_type = db.Column(db.String(20), nullable=False, default="snack")  # Field for meal categorization
-    date = db.Column(db.Date, nullable=False, default=datetime.now().date)  # Use local time
+    date = db.Column(db.Date, nullable=False, default=datetime.utcnow)  # Use callable default
     quantity = db.Column(db.Integer, nullable=False, default=100)  # in grams
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Add user association
     
