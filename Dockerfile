@@ -16,6 +16,7 @@ COPY . .
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
+flask db upgrade\n\
 python -c "from app import db; db.create_all()"\n\
 gunicorn --bind 0.0.0.0:8080 app:app' > /app/entrypoint.sh
 
