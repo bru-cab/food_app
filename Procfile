@@ -1,1 +1,1 @@
-web: flask db upgrade && python setup_db.py && gunicorn --bind 0.0.0.0:$PORT run:app 
+web: python create_tables.py && gunicorn --bind 0.0.0.0:$PORT run:app 
