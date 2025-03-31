@@ -11,6 +11,9 @@ class ModelType(Enum):
     GPT4 = "gpt-4"
 
 class Config:
+    # Flask settings
+    SECRET_KEY = os.getenv('SECRET_KEY', 'development-secret-key')  # Add secret key for sessions
+    
     # Database settings - always use PostgreSQL
     DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/food_entries')
     # Convert postgres:// to postgresql:// if necessary (Railway uses postgres://)
@@ -35,149 +38,67 @@ class Config:
     # Hugging Face settings
     HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
     
-    # Categorization prompts
-    HUGGINGFACE_PROMPT = "Categorize {food_name} into one of these categories: whole_foods (fresh fruits, vegetables, meats), minimally_processed (frozen fruits, canned vegetables), processed (packaged snacks, processed meats), fast_food (burgers, fries), or alcohol (beer, wine). Respond with ONLY the category name."
-    
-    OPENAI_SYSTEM_PROMPT = "You are a nutrition expert that categorizes foods into specific categories. Respond with ONLY the category name."
-    OPENAI_CATEGORIZATION_PROMPT = "Categorize {food_name} into one of these categories: whole_foods (fresh fruits, vegetables, meats), minimally_processed (frozen fruits, canned vegetables), processed (packaged snacks, processed meats), fast_food (burgers, fries), or alcohol (beer, wine)."
-    
-    # Nutrition prompts
-    HUGGINGFACE_NUTRITION_PROMPT = """What are the nutritional values per 100g for {food_name}? Include calories, energy in kJ, sugars, saturated fat, total fat, sodium in mg, fiber, protein, and percentage of fruits/vegetables/nuts."""
+    # Improved Nutrition prompts
+    HUGGINGFACE_NUTRITION_PROMPT = """Provide exactly these nutrition values per 100g of {food_name}:
+1. calories (kcal)
+2. energy in kJ
+3. sugars (g)
+4. saturated fat (g)
+5. total fat (g)
+6. sodium (mg)
+7. fiber (g)
+8. protein (g)
+9. percentage of fruits/vegetables/nuts (0-100%)
 
-    OPENAI_NUTRITION_SYSTEM_PROMPT = """You are a nutrition expert that provides detailed nutritional information for foods.
-For each food item, provide the following nutritional values per 100g:
-- Energy (in both kcal and kJ)
-- Total sugars (g)
-- Saturated fat (g)
-- Total fat (g)
-- Sodium (mg)
-- Fiber (g)
-- Protein (g)
-- Percentage of fruits, vegetables, legumes, and nuts (0-100)
+Format your response as ONLY comma-separated numbers in this exact order:
+calories, energy_kJ, sugars, saturated_fat, fat, sodium, fiber, protein, fruits_veg_nuts
 
-Format your response as a comma-separated list of values in this exact order:
-calories: X, energy_kj: X, sugars: X, saturated_fat: X, fat: X, sodium: X, fiber: X, protein: X, fruits_veg_nuts: X
+Example response for apple:
+52, 218, 10.4, 0.0, 0.2, 1, 2.4, 0.3, 100"""
 
-Use only numbers, no units. Round all values to 1 decimal place."""
+    OPENAI_NUTRITION_SYSTEM_PROMPT = """You are a nutrition database that provides nutritional information for foods.
+You MUST format your response as a comma-separated list of numerical values only.
+Do not include any labels, units, or explanations.
+Round all values to 1 decimal place.
+If uncertain about any value, provide a reasonable estimate based on similar foods.
 
-    OPENAI_NUTRITION_PROMPT = """Provide the nutritional information for {food_name} per 100g."""
+Respond ONLY with numbers in this exact format and order:
+calories, energy_kj, sugars, saturated_fat, fat, sodium, fiber, protein, fruits_veg_nuts
+
+Examples:
+Apple: 52, 218, 10.4, 0.0, 0.2, 1, 2.4, 0.3, 100
+Chicken breast: 165, 690, 0.0, 1.1, 3.6, 74, 0.0, 31.0, 0
+Potato chips: 536, 2243, 0.5, 3.4, 34.6, 525, 4.8, 7.0, 10"""
+
+    OPENAI_NUTRITION_PROMPT = """Provide only the numerical nutrition values per 100g for {food_name}.
+I need exactly these values in this order:
+1. Calories (kcal)
+2. Energy (kJ)
+3. Sugars (g)
+4. Saturated fat (g)
+5. Total fat (g)
+6. Sodium (mg)
+7. Fiber (g)
+8. Protein (g)
+9. Percentage of fruits/vegetables/nuts content (0-100)
+
+Format as comma-separated numbers ONLY. No text, no labels, no units."""
 
     # OpenAI settings
-    OPENAI_TEMPERATURE = 0.3
-    OPENAI_MAX_TOKENS = 50
-
-    # Food categories and their base scores
-    FOOD_CATEGORIES = {
-        'whole_foods': 100,
-        'minimally_processed': 70,
-        'processed': 40,
-        'fast_food': 20,
-        'alcohol': 10
-    }
-
-    # Rule-based categorization keywords
-    FOOD_KEYWORDS = {
-        'whole_foods': [
-            'apple', 'banana', 'orange', 'grape', 'berry', 'berries',
-            'chicken', 'beef', 'pork', 'fish', 'salmon', 'tuna', 'cod',
-            'egg', 'eggs', 'broccoli', 'spinach', 'kale', 'carrot',
-            'potato', 'rice', 'quinoa', 'almond', 'walnut'
-        ],
-        'minimally_processed': [
-            'yogurt', 'cheese', 'bread', 'olive oil', 'butter',
-            'frozen', 'honey', 'maple syrup', 'milk', 'cream',
-            'whole grain', 'roasted'
-        ],
-        'processed': [
-            'canned', 'packaged', 'cereal', 'sauce', 'ketchup',
-            'mayonnaise', 'chips', 'crackers', 'cookie', 'snack',
-            'processed', 'preserved'
-        ],
-        'fast_food': [
-            'mcdonalds', 'burger king', 'wendys', 'kfc', 'pizza hut',
-            'dominos', 'subway', 'taco bell', 'french fries', 'fries',
-            'big mac', 'whopper', 'nuggets'
-        ],
-        'alcohol': [
-            'beer', 'wine', 'vodka', 'rum', 'whiskey', 'gin',
-            'tequila', 'alcohol', 'alcoholic', 'spirit', 'liquor'
-        ]
-    }
-    
-    # Prompts for different models
-    OPENAI_SYSTEM_PROMPT = """You are a nutritionist that categorizes foods. 
-You MUST categorize plain meats, fish, fruits, and vegetables as whole_foods. 
-Only categorize as processed if explicitly mentioned as packaged or canned. 
-Respond only with the category name."""
-
-    OPENAI_CATEGORIZATION_PROMPT = """Categorize this single food item: "{food_name}" into exactly one of these categories.
-
-    Rules:
-    1. If the food is a plain, unprocessed ingredient (meat, fish, vegetable, fruit), it MUST be categorized as whole_foods
-    2. Only categorize as processed if you're certain it's packaged or manufactured
-    3. When in doubt about fish or meat, assume it's fresh and categorize as whole_foods
-    
-    Categories:
-    whole_foods:
-    - ANY fresh/raw meat (beef, chicken, fish, etc.)
-    - ANY fresh fish or seafood (salmon, tuna, cod, etc.)
-    - ANY fresh fruit or vegetable
-    - Eggs
-    - Plain nuts and seeds
-    - Plain rice, quinoa
-    
-    minimally_processed:
-    - Natural yogurt, cheese
-    - Whole grain bread
-    - Olive oil, butter
-    - Roasted nuts
-    - Frozen fruits/vegetables
-    - Honey, maple syrup
-    
-    processed:
-    - Canned foods (only if explicitly mentioned as canned)
-    - Packaged snacks
-    - Processed cheese products
-    - Breakfast cereals
-    - Sauces and condiments
-    
-    fast_food:
-    - Chain restaurant foods
-    - Fast food burgers
-    - Chain pizza
-    - French fries
-    - Deep fried restaurant foods
-    
-    alcohol:
-    - ANY alcoholic beverage
-    - Beer, wine, spirits
-
-    IMPORTANT: If the input is just a type of meat or fish (like 'salmon' or 'chicken'), it MUST be categorized as whole_foods.
-    
-    Respond with ONLY the category name, nothing else."""
-
-    # Simplified prompt for FLAN-T5
-    HUGGINGFACE_PROMPT = """Categorize this food: "{food_name}"
-Choose exactly one category from: whole_foods, minimally_processed, processed, fast_food, alcohol
-
-Rules:
-- whole_foods: fresh meat, fish, fruits, vegetables, eggs, plain rice
-- minimally_processed: yogurt, cheese, bread, olive oil, butter
-- processed: canned foods, packaged snacks, cereals, sauces
-- fast_food: restaurant foods, burgers, pizza, fries
-- alcohol: any alcoholic drink
-
-Important: If it's just meat or fish name, choose whole_foods.
-Respond with ONLY the category name."""
+    OPENAI_TEMPERATURE = 0.2
+    OPENAI_MAX_TOKENS = 75
 
     # Food type detection prompts
     HUGGINGFACE_FOOD_TYPE_PROMPT = """Analyze this food: "{food_name}"
-Return the food type, unit, and weight in this exact format: "type|unit|weight"
-Choose type from: beverages, snacks, fruits, vegetables, meats, grains
-Choose unit from: ml, g, cookie, piece, slice, unit, cup, tablespoon
+Extract any quantity information (e.g., "2 eggs", "3 slices") from the description.
 
-Rules for units and weights:
+Return the food type, unit, weight, and suggested quantity in this exact format: "type|unit|weight|quantity"
+Choose type from: beverages, snacks, fruits, vegetables, meats, grains
+Choose unit from: ml, g, cookie, piece, slice, unit, cup, tablespoon, egg
+
+Rules for units, weights, and quantities:
 - beverages: use "ml" (1 cup = 240ml)
+- eggs: use "egg" (standard egg = 50g)
 - cookies: use "cookie" (Oreo = 11g, chocolate chip = 16g, standard = 13g)
 - crackers: use "unit" (saltine = 3g, graham = 14g, standard = 8g)
 - fruits: use "piece" (apple = 180g, banana = 120g, orange = 130g)
@@ -185,30 +106,41 @@ Rules for units and weights:
 - spreads: use "tablespoon" (15g)
 - packaged snacks: use "unit" with specific weight
 - everything else: use "g"
+- quantity should reflect the number mentioned in the description (e.g., "2 eggs" → quantity = 2)
 
 Example responses:
-"beverages|ml|240" for a cup of drink
-"snacks|cookie|11" for an Oreo cookie
-"fruits|piece|180" for an apple
-"grains|slice|25" for white bread"""
+"beverages|ml|240|1" for a cup of drink
+"meats|egg|50|2" for scrambled eggs made with 2 eggs
+"snacks|cookie|11|1" for an Oreo cookie
+"fruits|piece|180|1" for an apple
+"grains|slice|25|3" for 3 slices of white bread"""
 
     OPENAI_FOOD_TYPE_SYSTEM_PROMPT = """You are a nutrition expert that categorizes foods and determines their natural serving units with precise weights.
-You must respond in this exact format: "type|unit|weight"
+
+You must extract any quantity information from the food description (e.g., "scrambled eggs (I used 2 eggs)" should suggest a serving size of 2 eggs).
+
+You must respond in this exact format: "type|unit|weight|quantity"
 where:
 - type is one of: beverages, snacks, fruits, vegetables, meats, grains
-- unit is one of: ml, g, cookie, piece, slice, unit, cup, tablespoon
+- unit is one of: ml, g, cookie, piece, slice, unit, cup, tablespoon, egg
 - weight is the typical weight in grams (or volume in ml) for one unit
+- quantity is the number of units suggested based on the food description (default to 1 if not specified)
+
+For example:
+- "scrambled eggs (I used 2 eggs)" should return "meats|egg|50|2" (50g per egg, 2 eggs)
+- "apple" should return "fruits|piece|180|1" (180g per apple, 1 apple)
 
 Common weights to use:
+Eggs:
+- Small egg: 42g
+- Medium egg: 50g
+- Large egg: 57g
+- Standard egg: 50g
+
 Cookies:
 - Oreo: 11g
 - Chocolate chip: 16g
 - Standard cookie: 13g
-
-Crackers:
-- Saltine: 3g
-- Graham: 14g
-- Standard cracker: 8g
 
 Fruits:
 - Apple: 180g
@@ -228,67 +160,14 @@ Other:
 - Standard snack bar: 35g"""
 
     OPENAI_FOOD_TYPE_PROMPT = """Analyze this food item: "{food_name}"
-Determine its category, natural serving unit, and typical weight per unit.
+Determine its category, natural serving unit, typical weight per unit, and suggested quantity based on the description.
 
-Categories and standard measurements:
+Look for quantity information in the description (e.g., "2 eggs", "3 slices") and use it for the suggested quantity.
 
-beverages:
-- Standard cup = 240ml
-- Small glass = 200ml
-- Can = 330ml
-Units: ml
+Respond with ONLY the category, unit, weight and quantity in this format: "type|unit|weight|quantity"
+Example: "snacks|cookie|11|2" for 2 Oreo cookies"""
 
-snacks:
-Cookies:
-- Oreo = 11g
-- Chocolate chip = 16g
-- Standard cookie = 13g
-Units: cookie
-
-Crackers:
-- Saltine = 3g
-- Graham = 14g
-- Standard cracker = 8g
-Units: unit
-
-Candy/Bars:
-- Standard chocolate bar = 45g
-- Small candy bar = 35g
-- Energy/protein bar = 60g
-Units: unit
-
-fruits:
-- Apple = 180g
-- Banana = 120g
-- Orange = 130g
-- Standard fruit = 120g
-Units: piece
-
-vegetables:
-- Standard serving = 80g
-- Cup of leafy greens = 30g
-Units: g
-
-meats:
-- Standard portion = 150g
-Units: g
-
-grains:
-Bread:
-- White slice = 25g
-- Whole wheat slice = 28g
-- Standard slice = 26g
-Units: slice
-
-Cereals:
-- Cup of cereal = 30g
-- Standard portion = 45g
-Units: g
-
-Respond with ONLY the category, unit, and weight in this format: "type|unit|weight"
-Example: "snacks|cookie|11" for an Oreo cookie"""
-
-    # Update serving sizes to include unit-based portions with specific weights
+    # Standard weights for different food items
     STANDARD_WEIGHTS = {
         'cookie': {
             'oreo': 11,
@@ -311,37 +190,103 @@ Example: "snacks|cookie|11" for an Oreo cookie"""
             'whole_wheat': 28,
             'standard': 26
         },
-        'snack_bar': {
-            'chocolate': 45,
-            'energy': 60,
-            'standard': 35
-        },
         'tablespoon': 15,
         'cup': {
             'liquid': 240,
             'cereal': 30,
-            'leafy_greens': 30
+            'leafy_greens': 15
         }
     }
-
-    # Food type keywords to help categorize foods
-    FOOD_TYPE_KEYWORDS = {
-        'beverages': ['drink', 'juice', 'soda', 'water', 'coffee', 'tea', 'milk', 'smoothie'],
-        'snacks': ['chips', 'crackers', 'nuts', 'popcorn', 'cookie', 'candy', 'chocolate'],
-        'fruits': ['apple', 'banana', 'orange', 'grape', 'berry', 'fruit'],
-        'vegetables': ['carrot', 'broccoli', 'spinach', 'lettuce', 'vegetable', 'salad'],
-        'meats': ['chicken', 'beef', 'pork', 'fish', 'meat', 'steak', 'salmon'],
-        'grains': ['rice', 'pasta', 'bread', 'cereal', 'oat', 'grain', 'wheat']
+    
+    # Standard serving sizes for different food types
+    SERVING_SIZES = {
+        'beverages': {
+            'unit': 'ml',
+            'sizes': [
+                {'label': 'Small glass (200ml)', 'value': 200},
+                {'label': '✓ Standard glass (250ml)', 'value': 250, 'default': True},
+                {'label': 'Large glass (330ml)', 'value': 330},
+                {'label': 'Custom volume (ml)', 'value': 'custom'}
+            ]
+        },
+        'snacks': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small portion (25g)', 'value': 25},
+                {'label': '✓ Standard portion (50g)', 'value': 50, 'default': True},
+                {'label': 'Large portion (100g)', 'value': 100},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        },
+        'fruits': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small piece (100g)', 'value': 100},
+                {'label': '✓ Medium piece (150g)', 'value': 150, 'default': True},
+                {'label': 'Large piece (200g)', 'value': 200},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        },
+        'vegetables': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small portion (50g)', 'value': 50},
+                {'label': '✓ Standard salad/side (100g)', 'value': 100, 'default': True, 'description': 'A typical side salad or vegetable serving'},
+                {'label': 'Medium salad/meal (150g)', 'value': 150, 'description': 'A main course salad or vegetable dish'},
+                {'label': 'Large salad/meal (250g)', 'value': 250, 'description': 'A large main course salad or vegetable dish'},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        },
+        'meats': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small portion (75g)', 'value': 75},
+                {'label': '✓ Standard portion (125g)', 'value': 125, 'default': True, 'description': 'Recommended serving size'},
+                {'label': 'Large portion (200g)', 'value': 200},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        },
+        'grains': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small portion (30g)', 'value': 30},
+                {'label': '✓ Standard portion (60g)', 'value': 60, 'default': True, 'description': 'A typical serving of pasta, rice or grains'},
+                {'label': 'Large portion (90g)', 'value': 90},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        },
+        'default': {
+            'unit': 'g',
+            'sizes': [
+                {'label': 'Small portion (50g)', 'value': 50},
+                {'label': '✓ Standard portion (100g)', 'value': 100, 'default': True},
+                {'label': 'Large portion (150g)', 'value': 150},
+                {'label': 'Extra large portion (200g)', 'value': 200},
+                {'label': 'Custom amount (g)', 'value': 'custom'}
+            ]
+        }
     }
 
     @staticmethod
     def get_food_type(food_name):
-        """Determine the food type based on keywords in the food name"""
+        """Determine the food type based on the name"""
         food_name = food_name.lower()
-        for food_type, keywords in Config.FOOD_TYPE_KEYWORDS.items():
-            if any(keyword in food_name for keyword in keywords):
-                return food_type
-        return 'default'
+        
+        # Simple detection based on common keywords
+        if any(word in food_name for word in ['water', 'juice', 'milk', 'coffee', 'tea', 'soda']):
+            return 'beverages'
+        elif any(word in food_name for word in ['apple', 'banana', 'orange', 'berry', 'fruit']):
+            return 'fruits'
+        elif any(word in food_name for word in ['vegetable', 'carrot', 'broccoli', 'spinach']):
+            return 'vegetables'
+        elif any(word in food_name for word in ['beef', 'chicken', 'pork', 'fish', 'meat']):
+            return 'meats'
+        elif any(word in food_name for word in ['bread', 'rice', 'pasta', 'grain', 'cereal']):
+            return 'grains'
+        elif any(word in food_name for word in ['cookie', 'chip', 'cracker', 'snack', 'candy']):
+            return 'snacks'
+        else:
+            return 'default'
 
     @staticmethod
     def get_serving_sizes(food_name):

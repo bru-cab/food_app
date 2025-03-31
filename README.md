@@ -1,68 +1,67 @@
-# Food Nutrition Score Tracker
+# Food Nutrition Scoring App
 
-A web application that helps users track their food intake and calculate nutrition scores based on the Nutri-Score system. The app uses AI to automatically retrieve nutrition information for foods and provides daily, weekly, and monthly nutrition summaries.
+A web application that helps users track and score their food consumption based on nutritional content.
 
-## Features
+## Project Structure
 
-- User authentication system
-- Automatic nutrition information retrieval using AI (GPT-3.5)
-- Manual nutrition information entry
-- Food reference database with search functionality
-- Nutri-Score calculation (A to E grading system)
-- Daily, weekly, and monthly nutrition summaries
-- Responsive web interface
+The application has been refactored into a modular structure:
 
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/bru-cab/food_app.git
-cd food_app
+```
+app/
+  ├── __init__.py          # Flask app initialization
+  ├── models/              # Database models
+  │   ├── __init__.py
+  │   ├── user.py          # User model with authentication
+  │   └── food.py          # FoodEntry and FoodReference models
+  ├── routes/              # API endpoints and view routes
+  │   ├── __init__.py
+  │   ├── auth.py          # Authentication routes
+  │   ├── main.py          # Main view routes
+  │   └── api.py           # API routes
+  ├── services/            # Business logic services
+  │   ├── __init__.py
+  │   ├── food_category.py # Food categorization and nutrition scoring
+  │   └── food_scoring.py  # Scoring calculations
+  └── utils/               # Utility functions
+      └── __init__.py
+config.py                  # Application configuration
+run.py                     # Application entry point
 ```
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
+## Running the Application
 
-3. Install dependencies:
-```bash
+1. Install dependencies:
+```
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
-   - Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-   - Edit the `.env` file and replace the placeholder values with your actual configuration:
-     - `OPENAI_API_KEY`: Your OpenAI API key for nutrition information retrieval
-     - Other optional configurations as needed
+2. Set up environment variables (see .env.example)
 
-5. Initialize the database:
-```bash
-python app.py
+3. Run the application:
+```
+python run.py
 ```
 
-## Usage
+The application will be available at http://localhost:5001
 
-1. Start the application:
-```bash
-python app.py
-```
+## Features
 
-2. Open a web browser and navigate to:
-```
-http://localhost:5001
-```
+- Food entry tracking with nutritional information
+- Automatic nutritional information retrieval using AI models
+- Daily, weekly, and monthly nutrition scoring
+- Food reference database
+- User accounts and authentication
+- Sharing food references between users
 
-3. Register a new account or log in with existing credentials.
+## API Endpoints
 
-4. Start tracking your food intake:
-   - Add foods manually or let AI fetch nutrition information
-   - View your nutrition scores and summaries
-   - Search and reuse previously entered foods
+- `/api/models` - Get/set AI model for nutrition analysis
+- `/api/food-references` - Food reference database
+- `/api/food` - Add/manage food entries
+- `/api/daily-score` - Get daily nutrition score
+- `/api/weekly-score` - Get weekly nutrition score
+- `/api/monthly-score` - Get monthly nutrition score
+- `/api/food-type/:name` - Get food type and serving size info
 
 ## Configuration
 
