@@ -44,9 +44,13 @@ def create_app(config_class=Config):
         from flask import send_from_directory
         return send_from_directory('../static', path)
     
-    # Register database tables
+    # Log successful app creation
+    logger.info("App created successfully")
+    
+    return app
+
+def init_db(app):
+    """Initialize database tables within application context"""
     with app.app_context():
         db.create_all()
-        logger.info("Database tables initialized successfully")
-    
-    return app 
+        logger.info("Database tables initialized successfully") 

@@ -1,4 +1,4 @@
-from app import create_app, db
+from app import create_app, db, init_db
 from flask_migrate import upgrade
 
 def setup_db():
