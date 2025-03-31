@@ -1,0 +1,1 @@
+web: flask db upgrade && python -c "from app import db; db.create_all()" && gunicorn --bind 0.0.0.0:$PORT app:app 
